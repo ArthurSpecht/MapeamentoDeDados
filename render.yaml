@@ -2,7 +2,7 @@ services:
   - type: web
     name: mapemaneto-de-dados
     runtime: node
-    plan: starter
+    plan: free
     buildCommand: npm install && npm run prisma:generate && npm run build
     preDeployCommand: npm run prisma:deploy
     startCommand: npx next start --hostname 0.0.0.0 --port $PORT
@@ -21,6 +21,6 @@ services:
 
 databases:
   - name: mapemaneto-de-dados-db
-    plan: starter
+    plan: free
     databaseName: mapemaneto_de_dados
     user: mapemaneto_de_dados
