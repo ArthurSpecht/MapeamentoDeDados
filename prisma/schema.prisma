@@ -1,0 +1,72 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model ImportHistory {
+  id          String   @id @default(uuid())
+  fileName    String
+  status      String
+  message     String   @default("")
+  inserted    Int      @default(0)
+  updated     Int      @default(0)
+  total       Int      @default(0)
+  errorDetails Json?
+  createdAt   DateTime @default(now())
+}
+
+model ProcessingActivity {
+  id               String            @id @default(uuid())
+  activityName     String
+  activityCode     String?           @unique
+  personalData     String            @default("")
+  purpose          String            @default("")
+  legalBasis       String            @default("")
+  archived         Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  purposes         ActivityPurpose[]
+  personalDataItems PersonalDataItem[]
+}
+
+model ActivityPurpose {
+  id                 String            @id
+  processingActivityId String
+  purpose            String            @default("")
+  retentionDeadline  String            @default("Indeterminado")
+  legalBasis         String            @default("")
+  createdAt          DateTime          @default(now())
+
+  processingActivity ProcessingActivity @relation(fields: [processingActivityId], references: [id], onDelete: Cascade)
+
+  @@index([processingActivityId])
+}
+
+model PersonalDataItem {
+  id                 String             @id
+  processingActivityId String
+  category           String             @default("Geral")
+  dataName           String
+  sensitive          Boolean            @default(false)
+  subjectTypes       String[]
+  sync               Boolean            @default(false)
+  createdAt          DateTime           @default(now())
+
+  processingActivity ProcessingActivity @relation(fields: [processingActivityId], references: [id], onDelete: Cascade)
+
+  @@index([processingActivityId])
+}

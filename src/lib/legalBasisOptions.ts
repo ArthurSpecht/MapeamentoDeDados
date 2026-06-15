@@ -1,0 +1,21 @@
+export const LEGAL_BASIS_OPTIONS = [
+  "(Art. 7, I) Consentimento",
+  "(Art. 7, II) Regulatório",
+  "(Art. 7, III) Políticas públicas",
+  "(Art. 7, IV) Estudos",
+  "(Art. 7, V) Contratos",
+  "(Art. 7, VI) Exercício de direitos",
+  "(Art. 7, VII) Vida",
+  "(Art. 7, VIII) Saúde",
+  "(Art. 7, IX) Legítimo interesse",
+  "(Art. 7, X) Crédito",
+  "(Art. 11, I) Consentimento",
+  "(Art. 11, II, a) Regulatório",
+  "(Art. 11, II, b) Políticas públicas",
+  "(Art. 11, II, c) Estudos",
+  "(Art. 11, II, d) Judicial",
+  "(Art. 11, II, e) Vida",
+  "(Art. 11, II, f) Saúde",
+  "(Art. 11, II, g) Prevenção",
+];
+

@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: mapemaneto-de-dados
+    runtime: node
+    plan: starter
+    buildCommand: npm install && npm run prisma:generate && npm run build
+    preDeployCommand: npm run prisma:deploy
+    startCommand: npx next start --hostname 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 20.18.0
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mapemaneto-de-dados-db
+          property: connectionString
+      - key: AUTH_SECRET
+        generateValue: true
+
+databases:
+  - name: mapemaneto-de-dados-db
+    plan: starter
+    databaseName: mapemaneto_de_dados
+    user: mapemaneto_de_dados

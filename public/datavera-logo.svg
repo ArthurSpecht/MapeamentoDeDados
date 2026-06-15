@@ -1,0 +1,23 @@
+<svg width="1250" height="260" viewBox="0 0 1250 260" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g transform="translate(25,18)">
+    <path d="M110 38C110 5 136 -20 170 -20C204 -20 230 5 230 38V66H207V38C207 17 190 0 170 0C150 0 133 17 133 38V66H110V38Z" fill="#C79A4A"/>
+    <path d="M109 69H230C234 69 238 72 238 77V129C238 157 222 184 198 200L170 219L142 200C118 184 102 157 102 129V77C102 72 105 69 109 69Z" stroke="#222831" stroke-width="12" stroke-linejoin="round"/>
+    <path d="M117 109H150L180 78H228" stroke="#C79A4A" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M111 145H148L178 174H222" stroke="#222831" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M177 112H211" stroke="#C79A4A" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="126" cy="80" r="10" stroke="#222831" stroke-width="8"/>
+    <circle cx="190" cy="82" r="10" stroke="#222831" stroke-width="8"/>
+    <circle cx="145" cy="145" r="10" stroke="#222831" stroke-width="8"/>
+    <circle cx="195" cy="145" r="10" stroke="#222831" stroke-width="8"/>
+    <circle cx="174" cy="112" r="8" stroke="#C79A4A" stroke-width="7"/>
+    <circle cx="220" cy="112" r="8" stroke="#C79A4A" stroke-width="7"/>
+  </g>
+  <text x="320" y="135" fill="#222831" font-family="Arial, Helvetica, sans-serif" font-size="86" letter-spacing="10">DATAVERA</text>
+  <circle cx="405" cy="125" r="6" fill="#C79A4A"/>
+  <circle cx="553" cy="125" r="6" fill="#C79A4A"/>
+  <circle cx="813" cy="125" r="6" fill="#C79A4A"/>
+  <line x1="475" y1="172" x2="605" y2="172" stroke="#C79A4A" stroke-width="4"/>
+  <text x="342" y="212" fill="#3F4650" font-family="Arial, Helvetica, sans-serif" font-size="24" letter-spacing="4">
+    GESTAO INTELIGENTE DE TRATAMENTO DE DADOS
+  </text>
+</svg>
