@@ -8,6 +8,7 @@ export default async function AtividadesTratamentoPage({
 }) {
   await requireUser();
   const tabParam = (searchParams?.tab || "ativas").toLowerCase();
-  const initialTab = tabParam === "arquivadas" ? "arquivadas" : "ativas";
+  const initialTab =
+    tabParam === "arquivadas" || tabParam === "riscos" ? tabParam : "ativas";
   return <AtividadesTratamentoClient initialTab={initialTab} />;
 }

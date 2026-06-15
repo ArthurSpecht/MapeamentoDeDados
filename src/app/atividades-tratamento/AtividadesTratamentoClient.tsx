@@ -11,11 +11,14 @@ import {
   History,
   Plus,
   Search,
+  ShieldAlert,
   Trash2,
   Upload,
 } from "lucide-react";
 import { LEGAL_BASIS_OPTIONS } from "@/lib/legalBasisOptions";
-type TabKey = "ativas" | "arquivadas";
+type TabKey = "ativas" | "arquivadas" | "riscos";
+
+const RISK_LEVELS = ["Baixo", "Médio", "Alto"] as const;
 
 type ImportHistoryItem = {
   id: string;
@@ -53,6 +56,20 @@ type ProcessingActivity = {
   archived: boolean;
   createdAt: string;
   updatedAt: string;
+};
+
+type ActivityRisk = {
+  id: string;
+  processingActivityId: string;
+  title: string;
+  description: string;
+  impact: string;
+  probability: string;
+  source: string;
+  createdAt: string;
+  updatedAt: string;
+  activityName: string;
+  activityCode: string | null;
 };
 
 function normalizeHeader(input: unknown): string {
@@ -137,8 +154,13 @@ export default function AtividadesTratamentoClient({ initialTab }: { initialTab:
   const [activities, setActivities] = useState<ProcessingActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+  const [risks, setRisks] = useState<ActivityRisk[]>([]);
+  const [riskErrorMessage, setRiskErrorMessage] = useState("");
+  const [loadingRisks, setLoadingRisks] = useState(false);
   const [importing, setImporting] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [creatingRisk, setCreatingRisk] = useState(false);
+  const [ignoredRiskSuggestions, setIgnoredRiskSuggestions] = useState<string[]>([]);
   const [showImportHistory, setShowImportHistory] = useState(false);
   const [importHistory, setImportHistory] = useState<ImportHistoryItem[]>([]);
   const [loadingImportHistory, setLoadingImportHistory] = useState(false);
@@ -159,6 +181,14 @@ export default function AtividadesTratamentoClient({ initialTab }: { initialTab:
     personalData: "",
     purpose: "",
     legalBasis: "",
+  });
+
+  const [riskForm, setRiskForm] = useState({
+    processingActivityId: "",
+    title: "",
+    description: "",
+    impact: "Médio",
+    probability: "Médio",
   });
 
   const fetchActivities = async (archived: boolean | null) => {
@@ -198,6 +228,26 @@ export default function AtividadesTratamentoClient({ initialTab }: { initialTab:
     }
   };
 
+  const fetchRisks = async () => {
+    try {
+      setLoadingRisks(true);
+      setRiskErrorMessage("");
+      const response = await fetch("/api/riscos");
+      const data = await response.json();
+      if (response.ok) {
+        setRisks(Array.isArray(data) ? data : []);
+      } else {
+        setRisks([]);
+        setRiskErrorMessage(data?.message || "Não foi possível carregar os riscos.");
+      }
+    } catch {
+      setRisks([]);
+      setRiskErrorMessage("Não foi possível carregar os riscos.");
+    } finally {
+      setLoadingRisks(false);
+    }
+  };
+
   const recordImportFailure = async (fileName: string, message: string) => {
     try {
       await fetch("/api/atividades/import/history", {
@@ -215,6 +265,11 @@ export default function AtividadesTratamentoClient({ initialTab }: { initialTab:
     setLoading(true);
     if (tab === "arquivadas") {
       fetchActivities(true);
+      return;
+    }
+    if (tab === "riscos") {
+      fetchActivities(null);
+      fetchRisks();
       return;
     }
     fetchActivities(false);
@@ -344,6 +399,69 @@ export default function AtividadesTratamentoClient({ initialTab }: { initialTab:
     };
   }, [activities]);
 
+  const riskSuggestions = useMemo(() => {
+    const existingKeys = new Set(
+      risks
+        .filter(r => r.source === "sugestao")
+        .map(r => `${r.processingActivityId}:${r.title}`)
+    );
+
+    return activities.flatMap((activity) => {
+      const suggestions: Array<{
+        key: string;
+        processingActivityId: string;
+        activityName: string;
+        title: string;
+        description: string;
+        impact: string;
+        probability: string;
+      }> = [];
+
+      const hasPersonalData =
+        Boolean(activity.personalData?.trim()) ||
+        (activity.personalDataItems?.length ?? 0) > 0;
+      const hasLegalBasis =
+        Boolean(activity.legalBasis?.trim()) ||
+        (activity.purposes || []).some(p => p.legalBasis?.trim());
+
+      if (!hasPersonalData) {
+        const title = "Atividade sem dados pessoais informados";
+        const key = `${activity.id}:${title}`;
+        if (!existingKeys.has(key) && !ignoredRiskSuggestions.includes(key)) {
+          suggestions.push({
+            key,
+            processingActivityId: activity.id,
+            activityName: activity.activityName,
+            title,
+            description:
+              "A atividade de tratamento não possui dados pessoais cadastrados, o que pode indicar inventário incompleto ou dificuldade de comprovar o escopo do tratamento.",
+            impact: "Médio",
+            probability: "Médio",
+          });
+        }
+      }
+
+      if (!hasLegalBasis) {
+        const title = "Atividade sem base legal informada";
+        const key = `${activity.id}:${title}`;
+        if (!existingKeys.has(key) && !ignoredRiskSuggestions.includes(key)) {
+          suggestions.push({
+            key,
+            processingActivityId: activity.id,
+            activityName: activity.activityName,
+            title,
+            description:
+              "A atividade de tratamento não possui hipótese/base legal informada, o que pode indicar risco de tratamento sem fundamento jurídico documentado.",
+            impact: "Alto",
+            probability: "Médio",
+          });
+        }
+      }
+
+      return suggestions;
+    });
+  }, [activities, ignoredRiskSuggestions, risks]);
+
   const setTab = (next: TabKey) => {
     setTabState(next);
     router.push(`/atividades-tratamento?tab=${next}`);
@@ -399,6 +517,67 @@ export default function AtividadesTratamentoClient({ initialTab }: { initialTab:
     await fetchActivities(false);
   };
 
+  const createRisk = async (payload = riskForm, source = "manual") => {
+    const response = await fetch("/api/riscos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...payload, source }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      alert(data?.message || "Erro ao criar risco.");
+      return false;
+    }
+
+    setCreatingRisk(false);
+    setRiskForm({
+      processingActivityId: "",
+      title: "",
+      description: "",
+      impact: "Médio",
+      probability: "Médio",
+    });
+    await fetchRisks();
+    return true;
+  };
+
+  const insertSuggestedRisk = async (suggestion: (typeof riskSuggestions)[number]) => {
+    const confirmed = window.confirm(
+      `Inserir este risco para "${suggestion.activityName}"?\n\n${suggestion.title}`
+    );
+    if (!confirmed) return;
+
+    const created = await createRisk(
+      {
+        processingActivityId: suggestion.processingActivityId,
+        title: suggestion.title,
+        description: suggestion.description,
+        impact: suggestion.impact,
+        probability: suggestion.probability,
+      },
+      "sugestao"
+    );
+
+    if (created) {
+      setIgnoredRiskSuggestions(prev => [...prev, suggestion.key]);
+    }
+  };
+
+  const deleteRisk = async (risk: ActivityRisk) => {
+    const confirmed = window.confirm(
+      `Excluir o risco "${risk.title}"? Esta ação não pode ser desfeita.`
+    );
+    if (!confirmed) return;
+
+    const response = await fetch(`/api/riscos/${risk.id}`, { method: "DELETE" });
+    const data = await response.json();
+    if (!response.ok) {
+      alert(data?.message || "Não foi possível excluir o risco.");
+      return;
+    }
+    await fetchRisks();
+  };
+
   return (
     <main className="max-w-6xl mx-auto w-full p-8">
       <div className="mb-6">
@@ -420,6 +599,12 @@ export default function AtividadesTratamentoClient({ initialTab }: { initialTab:
           onClick={() => setTab("arquivadas")}
         >
           Arquivados
+        </button>
+        <button
+          className={`pb-3 ${tab === "riscos" ? "text-contix-primary border-b-2 border-contix-primary" : "hover:text-gray-700"}`}
+          onClick={() => setTab("riscos")}
+        >
+          Riscos
         </button>
       </div>
 
@@ -521,11 +706,11 @@ export default function AtividadesTratamentoClient({ initialTab }: { initialTab:
             </button>
             <button
               className="flex items-center gap-2 bg-contix-primary text-white px-5 py-2.5 rounded-xl font-bold hover:bg-opacity-90"
-              onClick={() => setCreating(true)}
-              disabled={tab !== "ativas"}
+              onClick={() => (tab === "riscos" ? setCreatingRisk(true) : setCreating(true))}
+              disabled={tab === "arquivadas"}
               title={tab !== "ativas" ? "Disponível apenas em Ativas" : "Criar atividade"}
             >
-              <Plus size={18} /> Atividade de Tratamento
+              <Plus size={18} /> {tab === "riscos" ? "Risco" : "Atividade de Tratamento"}
             </button>
           </div>
         </div>
@@ -562,7 +747,140 @@ export default function AtividadesTratamentoClient({ initialTab }: { initialTab:
         )}
 
         <div className="p-5">
-          {loading ? (
+          {tab === "riscos" ? (
+            <div className="space-y-6">
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+                <div className="flex items-start gap-3">
+                  <ShieldAlert size={22} className="mt-0.5 text-amber-700" />
+                  <div className="flex-1">
+                    <div className="font-bold text-amber-950">Sugestões automáticas de riscos</div>
+                    <div className="mt-1 text-sm text-amber-900">
+                      A ferramenta sugere riscos quando uma atividade não possui dados pessoais cadastrados ou não possui base legal informada.
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  {riskSuggestions.length === 0 ? (
+                    <div className="rounded-xl border border-amber-100 bg-white/70 p-4 text-sm text-amber-900">
+                      Nenhuma sugestão pendente no momento.
+                    </div>
+                  ) : (
+                    riskSuggestions.map((suggestion) => (
+                      <div key={suggestion.key} className="rounded-xl border border-amber-100 bg-white p-4">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                          <div>
+                            <div className="text-sm font-bold text-gray-900">{suggestion.title}</div>
+                            <div className="mt-1 text-sm text-gray-600">
+                              Atividade: <span className="font-semibold">{suggestion.activityName}</span>
+                            </div>
+                            <div className="mt-2 text-sm text-gray-700">{suggestion.description}</div>
+                            <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold">
+                              <span className="rounded-full bg-gray-100 px-3 py-1 text-gray-700">
+                                Impacto: {suggestion.impact}
+                              </span>
+                              <span className="rounded-full bg-gray-100 px-3 py-1 text-gray-700">
+                                Probabilidade: {suggestion.probability}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 gap-2">
+                            <button
+                              className="rounded-xl bg-contix-primary px-4 py-2 text-sm font-bold text-white hover:bg-opacity-90"
+                              onClick={() => insertSuggestedRisk(suggestion)}
+                            >
+                              Inserir risco
+                            </button>
+                            <button
+                              className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50"
+                              onClick={() => setIgnoredRiskSuggestions(prev => [...prev, suggestion.key])}
+                            >
+                              Ignorar
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="border border-gray-200 rounded-2xl overflow-hidden">
+                <div className="border-b border-gray-100 bg-gray-50 px-5 py-4">
+                  <div className="font-bold text-gray-900">Riscos cadastrados</div>
+                  <div className="mt-1 text-sm text-gray-500">
+                    Riscos vinculados às atividades de tratamento, com impacto e probabilidade.
+                  </div>
+                </div>
+
+                {loadingRisks ? (
+                  <div className="flex justify-center items-center h-40">
+                    <div className="animate-spin rounded-full h-9 w-9 border-b-2 border-contix-primary"></div>
+                  </div>
+                ) : riskErrorMessage ? (
+                  <div className="m-5 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-900">
+                    {riskErrorMessage}
+                  </div>
+                ) : risks.length === 0 ? (
+                  <div className="m-5 rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-10 text-center text-gray-600">
+                    Nenhum risco cadastrado.
+                  </div>
+                ) : (
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-200">
+                        <th className="px-4 py-3 text-xs font-bold text-gray-700 uppercase tracking-wider">Risco</th>
+                        <th className="px-4 py-3 text-xs font-bold text-gray-700 uppercase tracking-wider">Atividade</th>
+                        <th className="px-4 py-3 text-xs font-bold text-gray-700 uppercase tracking-wider">Impacto</th>
+                        <th className="px-4 py-3 text-xs font-bold text-gray-700 uppercase tracking-wider">Probabilidade</th>
+                        <th className="px-4 py-3 text-xs font-bold text-gray-700 uppercase tracking-wider text-right">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {risks.map((risk) => (
+                        <tr key={risk.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="font-semibold text-gray-900">{risk.title}</div>
+                            {risk.description ? (
+                              <div className="mt-1 max-w-xl text-sm text-gray-600">{risk.description}</div>
+                            ) : null}
+                            <div className="mt-2 text-xs text-gray-400">
+                              {risk.source === "sugestao" ? "Sugerido pela ferramenta" : "Criado manualmente"}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-gray-700">
+                            <div>{risk.activityName}</div>
+                            <div className="text-xs text-gray-400">{risk.activityCode || "Sem código"}</div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="rounded-full bg-gray-100 px-3 py-1 text-sm font-bold text-gray-700">
+                              {risk.impact}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="rounded-full bg-gray-100 px-3 py-1 text-sm font-bold text-gray-700">
+                              {risk.probability}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex justify-end">
+                              <button
+                                className="p-2 rounded-lg border border-red-100 text-red-600 hover:bg-red-50"
+                                title="Excluir risco"
+                                onClick={() => deleteRisk(risk)}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          ) : loading ? (
             <div className="flex justify-center items-center h-48">
               <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-contix-primary"></div>
             </div>
@@ -743,6 +1061,98 @@ export default function AtividadesTratamentoClient({ initialTab }: { initialTab:
                   })}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {creatingRisk && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl border border-gray-200">
+            <div className="p-5 border-b border-gray-100">
+              <div className="text-lg font-bold text-gray-900">Novo Risco</div>
+              <div className="text-sm text-gray-500 mt-1">
+                Vincule o risco a uma atividade de tratamento e defina impacto e probabilidade.
+              </div>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="text-sm font-bold text-gray-700">Atividade de Tratamento</label>
+                <select
+                  className="mt-1 w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none bg-white"
+                  value={riskForm.processingActivityId}
+                  onChange={(e) => setRiskForm({ ...riskForm, processingActivityId: e.target.value })}
+                >
+                  <option value="">Selecione</option>
+                  {activities.map((activity) => (
+                    <option key={activity.id} value={activity.id}>
+                      {activity.activityName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-bold text-gray-700">Risco</label>
+                <input
+                  className="mt-1 w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none"
+                  value={riskForm.title}
+                  onChange={(e) => setRiskForm({ ...riskForm, title: e.target.value })}
+                  placeholder="Ex.: Tratamento sem base legal documentada"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-bold text-gray-700">Descrição</label>
+                <textarea
+                  className="mt-1 w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none min-h-24"
+                  value={riskForm.description}
+                  onChange={(e) => setRiskForm({ ...riskForm, description: e.target.value })}
+                  placeholder="Explique o contexto e a consequência possível."
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-bold text-gray-700">Impacto</label>
+                  <select
+                    className="mt-1 w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none bg-white"
+                    value={riskForm.impact}
+                    onChange={(e) => setRiskForm({ ...riskForm, impact: e.target.value })}
+                  >
+                    {RISK_LEVELS.map((level) => (
+                      <option key={level} value={level}>
+                        {level}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-bold text-gray-700">Probabilidade</label>
+                  <select
+                    className="mt-1 w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none bg-white"
+                    value={riskForm.probability}
+                    onChange={(e) => setRiskForm({ ...riskForm, probability: e.target.value })}
+                  >
+                    {RISK_LEVELS.map((level) => (
+                      <option key={level} value={level}>
+                        {level}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div className="p-5 border-t border-gray-100 flex items-center justify-between">
+              <button
+                className="px-4 py-2.5 rounded-xl border border-gray-200 font-bold text-gray-700 hover:bg-gray-50"
+                onClick={() => setCreatingRisk(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                className="px-5 py-2.5 rounded-xl bg-contix-primary text-white font-bold hover:bg-opacity-90"
+                onClick={() => createRisk()}
+              >
+                Salvar
+              </button>
             </div>
           </div>
         </div>

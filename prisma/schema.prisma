@@ -41,6 +41,24 @@ model ProcessingActivity {
 
   purposes         ActivityPurpose[]
   personalDataItems PersonalDataItem[]
+  risks            ActivityRisk[]
+}
+
+model ActivityRisk {
+  id                   String             @id @default(uuid())
+  processingActivityId String
+  title                String
+  description          String             @default("")
+  impact               String
+  probability          String
+  source               String             @default("manual")
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  processingActivity   ProcessingActivity @relation(fields: [processingActivityId], references: [id], onDelete: Cascade)
+
+  @@index([processingActivityId])
+  @@index([createdAt])
 }
 
 model ActivityPurpose {
